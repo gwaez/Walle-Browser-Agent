@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Walle Sidebar</title>
+    <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <span class="icon">🤖</span>
+                <h1>Walle</h1>
+            </div>
+            <div class="status-badge" id="server-status">Connecting...</div>
+        </header>
+
+        <main id="chat-container">
+            <div class="message system">
+                Welcome to Walle. Navigate to any page and click "Read Page" to start.
+            </div>
+        </main>
+
+        <footer>
+            <div class="actions">
+                <button id="read-page-btn" class="primary-btn">
+                    <span class="btn-icon">🔍</span> Read Page
+                </button>
+            </div>
+            <div class="input-area">
+                <input type="text" id="user-input" placeholder="Ask Walle to do something...">
+                <button id="send-btn">➔</button>
+            </div>
+        </footer>
+    </div>
+    <script src="sidebar.js"></script>
+</body>
+</html>
