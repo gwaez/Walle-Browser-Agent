@@ -26,7 +26,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.error("Agent Error:", err);
             sendResponse({ 
                 success: false, 
-                error: "Local agent is not reachable. Ensure 'python main.py' is running at http://localhost:8787" 
+                error: `Agent Error: ${err.message}`
             });
         });
         

@@ -11,6 +11,7 @@ from openai import OpenAI
 load_dotenv()
 
 LOG_FULL_CONTENT = os.getenv("LOG_FULL_CONTENT", "false").lower() == "true"
+OFFLINE_FALLBACK = os.getenv("OFFLINE_FALLBACK", "true").lower() == "true"
 
 # Configure logging
 logging.basicConfig(
@@ -38,10 +39,13 @@ app.add_middleware(
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 client = None
 
-if OPENAI_API_KEY:
-    client = OpenAI(api_key=OPENAI_API_KEY)
+if OPENAI_API_KEY and OPENAI_API_KEY != "your_openai_api_key_here":
+    try:
+        client = OpenAI(api_key=OPENAI_API_KEY)
+    except Exception as e:
+        logger.error(f"Failed to initialize OpenAI client: {e}")
 else:
-    logger.warning("OPENAI_API_KEY not found in .env file.")
+    logger.warning("OPENAI_API_KEY is missing or invalid. Agent will use fallback mode.")
 
 class PageContext(BaseModel):
     url: str
@@ -60,7 +64,7 @@ class ActionConfirmation(BaseModel):
     action_id: str
     confirmed: bool
 
-# Safety Layer Keywords
+# Safety Layer Keywords - Expanded
 DANGEROUS_KEYWORDS = [
     "approve", "submit", "delete", "cancel", "send", "save", "post", 
     "payment", "buy", "purchase", "transfer", "confirm", "reject"
@@ -71,18 +75,37 @@ def check_safety(proposed_action: str) -> bool:
     proposed_action_lower = proposed_action.lower()
     return any(keyword in proposed_action_lower for keyword in DANGEROUS_KEYWORDS)
 
+def generate_fallback_analysis(context: PageContext, error_message: str) -> dict:
+    """Generates a structured analysis without calling AI."""
+    return {
+        "summary": f"Walle read this page: '{context.title}'. It contains {len(context.text)} characters of text.",
+        "suggested_actions": [
+            f"Review the {len(context.forms)} forms found on the page.",
+            f"Check the {len(context.buttons)} available buttons.",
+            f"Ask a question about the page content.",
+            "Extract key data (manual summary)"
+        ],
+        "safety_note": f"⚠️ AI analysis is unavailable ({error_message}). Walle is running in Offline Fallback Mode."
+    }
+
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "agent": "Walle", "mode": "read-only-mvp"}
+    return {
+        "status": "healthy", 
+        "agent": "Walle", 
+        "mode": "read-only-mvp",
+        "ai_ready": client is not None,
+        "fallback_enabled": OFFLINE_FALLBACK
+    }
 
 @app.post("/analyze-page")
 async def analyze_page(context: PageContext):
-    if not client:
-        raise HTTPException(status_code=500, detail="OpenAI client not configured.")
-    
     logger.info(f"ACTION: analyze-page | URL: {context.url} | TITLE: {context.title}")
-    if LOG_FULL_CONTENT:
-        logger.info(f"CONTENT: {context.text[:500]}...")
+    
+    if not client:
+        if OFFLINE_FALLBACK:
+            return {"status": "success", "analysis": generate_fallback_analysis(context, "API Key Missing")}
+        raise HTTPException(status_code=500, detail="OpenAI client not configured.")
     
     prompt = f"""
     You are Walle, a browser agent. Analyze the following page content and suggest the next best actions.
@@ -117,7 +140,15 @@ async def analyze_page(context: PageContext):
         analysis = response.choices[0].message.content
         return {"status": "success", "analysis": analysis}
     except Exception as e:
+        error_msg = str(e).lower()
         logger.error(f"ERROR: analyze-page | {str(e)}")
+        
+        # Check for quota/auth issues
+        if "insufficient_quota" in error_msg or "rate_limit" in error_msg or "authentication" in error_msg:
+            if OFFLINE_FALLBACK:
+                logger.warning("Switching to offline fallback due to API error.")
+                return {"status": "success", "analysis": generate_fallback_analysis(context, "API Quota Exceeded")}
+        
         raise HTTPException(status_code=500, detail=f"OpenAI API Error: {str(e)}")
 
 @app.post("/agent-command")
