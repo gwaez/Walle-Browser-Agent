@@ -6,18 +6,8 @@ const chatContainer = document.getElementById('chat-container');
 const readPageBtn = document.getElementById('read-page-btn');
 const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
-const statusBadge = document.getElementById('server-status');
-
-// Initialize
-checkServerStatus();
-setInterval(checkServerStatus, 5000);
-
-// Event Listeners
-readPageBtn.addEventListener('click', handleReadPage);
-sendBtn.addEventListener('click', handleSendMessage);
-userInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleSendMessage();
-});
+let currentPageContext = null;
+let isLoading = false;
 
 async function checkServerStatus() {
     chrome.runtime.sendMessage({ action: "CHECK_AGENT_HEALTH" }, (response) => {
@@ -25,70 +15,92 @@ async function checkServerStatus() {
             statusBadge.innerText = "Online";
             statusBadge.className = "status-badge online";
         } else {
-            statusBadge.innerText = "Offline";
+            const errorMsg = response ? response.error : "Offline";
+            statusBadge.innerText = errorMsg;
             statusBadge.className = "status-badge offline";
         }
     });
 }
 
+function setLoading(loading) {
+    isLoading = loading;
+    readPageBtn.disabled = loading;
+    sendBtn.disabled = loading;
+    readPageBtn.innerHTML = loading ? '<span class="spinner"></span> Processing...' : '<span class="btn-icon">🔍</span> Read Page';
+}
+
 async function handleReadPage() {
+    if (isLoading) return;
+    setLoading(true);
     addMessage("system", "Extracting page data...");
     
-    // Get current tab
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    if (!tab) {
-        addMessage("system", "Error: No active tab found.");
-        return;
-    }
+    try {
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (!tab) throw new Error("No active tab found.");
 
-    // Request data from content script
-    chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_PAGE_DATA" }, (pageData) => {
-        if (!pageData) {
-            addMessage("system", "Error: Could not read page. Try refreshing the page.");
-            return;
-        }
-
-        addMessage("system", "Sending data to Walle Agent...");
-        
-        // Proxy to local agent
-        chrome.runtime.sendMessage({ 
-            action: "PROXY_TO_AGENT", 
-            endpoint: "/analyze-page",
-            payload: pageData 
-        }, (response) => {
-            if (response && response.success) {
-                const analysis = JSON.parse(response.data.analysis);
-                displayAnalysis(analysis);
-            } else {
-                addMessage("system", "Error: Agent is not responding. Ensure local server is running at :8787");
+        chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_PAGE_DATA" }, (pageData) => {
+            if (chrome.runtime.lastError || !pageData) {
+                addMessage("system", "Error: Could not read page. Try refreshing the page.");
+                setLoading(false);
+                return;
             }
+
+            currentPageContext = pageData;
+            addMessage("system", "Analyzing page content...");
+            
+            chrome.runtime.sendMessage({ 
+                action: "PROXY_TO_AGENT", 
+                endpoint: "/analyze-page",
+                payload: pageData 
+            }, (response) => {
+                setLoading(false);
+                if (response && response.success) {
+                    try {
+                        const analysis = typeof response.data.analysis === 'string' ? JSON.parse(response.data.analysis) : response.data.analysis;
+                        displayAnalysis(analysis);
+                    } catch (e) {
+                        addMessage("agent", "Received summary: " + response.data.analysis);
+                    }
+                } else {
+                    addMessage("system", "Error: " + (response.error || "Agent is not responding."));
+                }
+            });
         });
-    });
+    } catch (err) {
+        addMessage("system", "Error: " + err.message);
+        setLoading(false);
+    }
 }
 
 async function handleSendMessage() {
     const text = userInput.value.trim();
-    if (!text) return;
+    if (!text || isLoading) return;
 
     addMessage("user", text);
     userInput.value = "";
+    setLoading(true);
 
     chrome.runtime.sendMessage({ 
         action: "PROXY_TO_AGENT", 
         endpoint: "/agent-command",
-        payload: { command: text } 
+        payload: { 
+            command: text,
+            context: currentPageContext 
+        } 
     }, (response) => {
+        setLoading(false);
         if (response && response.success) {
             const data = response.data;
             if (data.status === "confirmation_required") {
                 addMessage("agent", data.message);
                 showConfirmation(data.action_id);
+            } else if (data.status === "blocked") {
+                addMessage("system", "🚫 " + data.message);
             } else {
                 addMessage("agent", data.message);
             }
         } else {
-            addMessage("agent", "Error communicating with agent.");
+            addMessage("agent", "Error: " + (response.error || "Communication failed."));
         }
     });
 }

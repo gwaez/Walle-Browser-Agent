@@ -10,10 +10,12 @@ import openai
 # Load environment variables
 load_dotenv()
 
+LOG_FULL_CONTENT = os.getenv("LOG_FULL_CONTENT", "false").lower() == "true"
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
         logging.FileHandler("agent.log"),
         logging.StreamHandler()
@@ -21,19 +23,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger("WalleAgent")
 
-app = FastAPI(title="Walle Browser Agent")
+app = FastAPI(title="Walle Browser Agent MVP")
 
 # Enable CORS for Chrome Extension
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify the extension ID
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # OpenAI Client setup
-openai.api_key = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    logger.warning("OPENAI_API_KEY not found in .env file.")
+openai.api_key = OPENAI_API_KEY
 
 class PageContext(BaseModel):
     url: str
@@ -42,6 +47,7 @@ class PageContext(BaseModel):
     forms: List[dict]
     buttons: List[dict]
     tables: List[dict]
+    links: Optional[List[dict]] = []
 
 class AgentCommand(BaseModel):
     command: str
@@ -51,8 +57,11 @@ class ActionConfirmation(BaseModel):
     action_id: str
     confirmed: bool
 
-# Safety Layer Keywords
-DANGEROUS_KEYWORDS = ["approve", "submit", "delete", "cancel", "send", "save", "post", "payment", "buy", "purchase"]
+# Safety Layer Keywords - Expanded
+DANGEROUS_KEYWORDS = [
+    "approve", "submit", "delete", "cancel", "send", "save", "post", 
+    "payment", "buy", "purchase", "transfer", "confirm", "reject"
+]
 
 def check_safety(proposed_action: str) -> bool:
     """Returns True if confirmation is required."""
@@ -61,11 +70,13 @@ def check_safety(proposed_action: str) -> bool:
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "agent": "Walle"}
+    return {"status": "healthy", "agent": "Walle", "mode": "read-only-mvp"}
 
 @app.post("/analyze-page")
 async def analyze_page(context: PageContext):
-    logger.info(f"Analyzing page: {context.url} - {context.title}")
+    logger.info(f"ACTION: analyze-page | URL: {context.url} | TITLE: {context.title}")
+    if LOG_FULL_CONTENT:
+        logger.info(f"CONTENT: {context.text[:500]}...")
     
     prompt = f"""
     You are Walle, a browser agent. Analyze the following page content and suggest the next best actions.
@@ -79,6 +90,7 @@ async def analyze_page(context: PageContext):
     - Forms: {len(context.forms)}
     - Buttons: {len(context.buttons)}
     - Tables: {len(context.tables)}
+    - Links: {len(context.links) if context.links else 0}
     
     Return a JSON response with:
     1. 'summary': A brief overview of what this page is.
@@ -87,9 +99,8 @@ async def analyze_page(context: PageContext):
     """
     
     try:
-        # Note: Using modern OpenAI API structure if available, or fallback
         response = openai.ChatCompletion.create(
-            model="gpt-4o-mini", # or gpt-4
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful browser assistant. Always return valid JSON."},
                 {"role": "user", "content": prompt}
@@ -98,39 +109,40 @@ async def analyze_page(context: PageContext):
         )
         
         analysis = response.choices[0].message.content
-        logger.info(f"Analysis complete for {context.url}")
         return {"status": "success", "analysis": analysis}
     except Exception as e:
-        logger.error(f"Error calling OpenAI: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"ERROR: analyze-page | {str(e)}")
+        raise HTTPException(status_code=500, detail="OpenAI API Error")
 
 @app.post("/agent-command")
 async def agent_command(cmd: AgentCommand):
-    logger.info(f"Received command: {cmd.command}")
+    url = cmd.context.get('url') if cmd.context else "unknown"
+    logger.info(f"ACTION: agent-command | CMD: {cmd.command} | URL: {url}")
     
-    # Check if the command involves dangerous actions
     if check_safety(cmd.command):
         return {
             "status": "confirmation_required",
             "message": f"The action '{cmd.command}' requires your approval. Do you want to proceed?",
-            "action_id": "pending_action_123" # In a real app, generate a unique ID
+            "action_id": "pending_action_123"
         }
     
-    # Simulate execution or call LLM for execution plan
     return {
         "status": "success",
-        "message": f"Executing: {cmd.command}",
-        "result": "Action simulated successfully."
+        "message": f"I've processed your request: '{cmd.command}'. In this MVP, I can only provide information, not perform actions.",
+        "result": "Read-only response."
     }
 
 @app.post("/confirm-action")
 async def confirm_action(confirmation: ActionConfirmation):
     if confirmation.confirmed:
-        logger.info(f"Action {confirmation.action_id} confirmed by user.")
-        return {"status": "success", "message": "Action executed."}
+        logger.info(f"ACTION: confirm-action | ID: {confirmation.action_id} | STATUS: BLOCKED (MVP)")
+        return {
+            "status": "blocked",
+            "message": "Action execution is not enabled in the read-only MVP."
+        }
     else:
-        logger.info(f"Action {confirmation.action_id} cancelled by user.")
-        return {"status": "cancelled", "message": "Action aborted."}
+        logger.info(f"ACTION: confirm-action | ID: {confirmation.action_id} | STATUS: CANCELLED")
+        return {"status": "cancelled", "message": "Action aborted by user."}
 
 if __name__ == "__main__":
     import uvicorn

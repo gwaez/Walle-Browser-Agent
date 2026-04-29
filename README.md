@@ -10,46 +10,51 @@ Walle is a smart browser assistant that uses a Chrome Extension to read web page
 ## Setup Instructions
 
 ### 1. Local Agent (Python)
-1. Navigate to `local-agent/`.
-2. Install dependencies:
-   ```bash
+1. Open **PowerShell** or Command Prompt.
+2. Navigate to `local-agent/`.
+3. Create a virtual environment (Recommended):
+   ```powershell
+   python -m venv venv
+   .\venv\Scripts\activate
+   ```
+4. Install dependencies:
+   ```powershell
    pip install -r requirements.txt
    ```
-3. Create a `.env` file from `.env.example`:
-   ```bash
-   cp .env.example .env
+5. Setup environment:
+   ```powershell
+   copy .env.example .env
    ```
-4. Add your `OPENAI_API_KEY` to the `.env` file.
-5. Start the agent:
-   ```bash
+6. Add your `OPENAI_API_KEY` to the `.env` file.
+7. Start the agent:
+   ```powershell
    python main.py
    ```
-   The agent will run at `http://localhost:8787`.
 
 ### 2. Chrome Extension
 1. Open Chrome and go to `chrome://extensions/`.
-2. Enable **Developer mode** (top right).
-3. Click **Load unpacked**.
-4. Select the `extension/` folder from this project.
-5. Pin the Walle extension for easy access.
+2. Enable **Developer mode**.
+3. Click **Load unpacked** and select the `extension/` folder.
 
-## How to Use
-1. Open the Walle side panel (click the extension icon or use the side panel menu).
-2. Navigate to any website.
-3. Click **"Read Page"**.
-4. Walle will extract the DOM structure, forms, and buttons, then send them to the local agent.
-5. The agent (GPT-4o-mini) will provide a summary and suggest next steps.
-6. Type commands in the chat. If a command involves sensitive actions (e.g., "delete", "post"), Walle will ask for confirmation first.
+## Troubleshooting
 
-## Safety Layer
-Walle includes a safety layer that flags keywords like:
-- `approve`, `submit`, `delete`, `cancel`, `send`, `save`, `post`, `payment`.
+### "python is not recognized"
+Ensure Python is added to your Windows PATH. You may need to use `py` or `python3` instead of `python`.
 
-Any command containing these keywords will trigger a "Confirmation Required" UI in the sidebar before the agent proceeds.
+### "Local agent offline"
+- Ensure `main.py` is running and shows `Uvicorn running on http://127.0.0.1:8787`.
+- Check if a firewall is blocking port 8787.
+- Refresh the Chrome extension after starting the agent.
 
-## MVP Features
-- [x] Page scraping (Text, Forms, Buttons, Tables)
-- [x] Local FastAPI communication
-- [x] AI-powered analysis and suggestions
-- [x] Safety confirmation UI
-- [x] Premium dark-mode UI
+### "OpenAI API Error"
+- Verify your API key in `.env`.
+- Ensure you have sufficient credits on your OpenAI account.
+
+## MVP Scope (Read-Only)
+Walle is currently in **Read-Only MVP mode**.
+- [x] Extracts: URL, Title, Visible Text, Forms, Buttons, Tables, Links.
+- [x] Analyzes: AI-powered summary and suggestions.
+- [x] Safety: Confirmation required for 13+ risky keywords.
+- [!] Execution: Real actions (clicking/typing) are **blocked** for safety.
+
+See [TESTING.md](docs/TESTING.md) for detailed verification steps.

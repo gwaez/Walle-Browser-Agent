@@ -14,9 +14,21 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             },
             body: JSON.stringify(request.payload)
         })
-        .then(res => res.json())
+        .then(async res => {
+            if (!res.ok) {
+                const errorText = await res.text();
+                throw new Error(`Agent returned ${res.status}: ${errorText}`);
+            }
+            return res.json();
+        })
         .then(data => sendResponse({ success: true, data }))
-        .catch(err => sendResponse({ success: false, error: err.message }));
+        .catch(err => {
+            console.error("Agent Error:", err);
+            sendResponse({ 
+                success: false, 
+                error: "Local agent is not reachable. Ensure 'python main.py' is running at http://localhost:8787" 
+            });
+        });
         
         return true; // async
     }
@@ -25,7 +37,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         fetch(`${LOCAL_AGENT_URL}/health`)
         .then(res => res.json())
         .then(data => sendResponse({ success: true, data }))
-        .catch(err => sendResponse({ success: false, error: err.message }));
+        .catch(err => sendResponse({ 
+            success: false, 
+            error: "Offline" 
+        }));
         
         return true;
     }
