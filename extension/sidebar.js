@@ -2,12 +2,37 @@
  * Walle Sidebar Logic
  */
 
+// DOM Elements
 const chatContainer = document.getElementById('chat-container');
 const readPageBtn = document.getElementById('read-page-btn');
 const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
+const statusBadge = document.getElementById('status-badge');
+
 let currentPageContext = null;
 let isLoading = false;
+
+// Initialize
+if (validateElements()) {
+    checkServerStatus();
+    setInterval(checkServerStatus, 5000);
+
+    // Event Listeners
+    readPageBtn.addEventListener('click', handleReadPage);
+    sendBtn.addEventListener('click', handleSendMessage);
+    userInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleSendMessage();
+    });
+}
+
+function validateElements() {
+    const required = [chatContainer, readPageBtn, userInput, sendBtn, statusBadge];
+    if (required.some(el => !el)) {
+        console.error("Critical Error: Missing required DOM elements.");
+        return false;
+    }
+    return true;
+}
 
 async function checkServerStatus() {
     chrome.runtime.sendMessage({ action: "CHECK_AGENT_HEALTH" }, (response) => {
@@ -24,9 +49,11 @@ async function checkServerStatus() {
 
 function setLoading(loading) {
     isLoading = loading;
-    readPageBtn.disabled = loading;
-    sendBtn.disabled = loading;
-    readPageBtn.innerHTML = loading ? '<span class="spinner"></span> Processing...' : '<span class="btn-icon">🔍</span> Read Page';
+    if (readPageBtn) {
+        readPageBtn.disabled = loading;
+        readPageBtn.innerHTML = loading ? '<span class="spinner"></span> Processing...' : '<span class="btn-icon">🔍</span> Read Page';
+    }
+    if (sendBtn) sendBtn.disabled = loading;
 }
 
 async function handleReadPage() {
@@ -38,9 +65,11 @@ async function handleReadPage() {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab) throw new Error("No active tab found.");
 
+        // Inject content script if not already there or just try communicating
         chrome.tabs.sendMessage(tab.id, { action: "EXTRACT_PAGE_DATA" }, (pageData) => {
             if (chrome.runtime.lastError || !pageData) {
-                addMessage("system", "Error: Could not read page. Try refreshing the page.");
+                console.error("Content script error:", chrome.runtime.lastError);
+                addMessage("system", "Error: Could not communicate with the page. Please refresh the page and try again.");
                 setLoading(false);
                 return;
             }
@@ -137,8 +166,11 @@ function showConfirmation(actionId) {
     chatContainer.appendChild(confirmDiv);
     chatContainer.scrollTop = chatContainer.scrollHeight;
 
-    document.getElementById(`confirm-${actionId}`).onclick = () => handleConfirm(actionId, true);
-    document.getElementById(`cancel-${actionId}`).onclick = () => handleConfirm(actionId, false);
+    const confirmBtn = document.getElementById(`confirm-${actionId}`);
+    const cancelBtn = document.getElementById(`cancel-${actionId}`);
+    
+    if (confirmBtn) confirmBtn.onclick = () => handleConfirm(actionId, true);
+    if (cancelBtn) cancelBtn.onclick = () => handleConfirm(actionId, false);
 }
 
 async function handleConfirm(actionId, confirmed) {

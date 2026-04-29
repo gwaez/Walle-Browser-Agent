@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Walle Browser Agent",
-  "version": "1.0",
+  "version": "1.0.1",
   "description": "A smart browser agent connected to a local Python server.",
   "permissions": [
     "sidePanel",

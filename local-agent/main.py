@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
-import openai
+from openai import OpenAI
 
 # Load environment variables
 load_dotenv()
@@ -36,9 +36,12 @@ app.add_middleware(
 
 # OpenAI Client setup
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
+client = None
+
+if OPENAI_API_KEY:
+    client = OpenAI(api_key=OPENAI_API_KEY)
+else:
     logger.warning("OPENAI_API_KEY not found in .env file.")
-openai.api_key = OPENAI_API_KEY
 
 class PageContext(BaseModel):
     url: str
@@ -57,7 +60,7 @@ class ActionConfirmation(BaseModel):
     action_id: str
     confirmed: bool
 
-# Safety Layer Keywords - Expanded
+# Safety Layer Keywords
 DANGEROUS_KEYWORDS = [
     "approve", "submit", "delete", "cancel", "send", "save", "post", 
     "payment", "buy", "purchase", "transfer", "confirm", "reject"
@@ -74,6 +77,9 @@ async def health_check():
 
 @app.post("/analyze-page")
 async def analyze_page(context: PageContext):
+    if not client:
+        raise HTTPException(status_code=500, detail="OpenAI client not configured.")
+    
     logger.info(f"ACTION: analyze-page | URL: {context.url} | TITLE: {context.title}")
     if LOG_FULL_CONTENT:
         logger.info(f"CONTENT: {context.text[:500]}...")
@@ -99,7 +105,7 @@ async def analyze_page(context: PageContext):
     """
     
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a helpful browser assistant. Always return valid JSON."},
@@ -112,7 +118,7 @@ async def analyze_page(context: PageContext):
         return {"status": "success", "analysis": analysis}
     except Exception as e:
         logger.error(f"ERROR: analyze-page | {str(e)}")
-        raise HTTPException(status_code=500, detail="OpenAI API Error")
+        raise HTTPException(status_code=500, detail=f"OpenAI API Error: {str(e)}")
 
 @app.post("/agent-command")
 async def agent_command(cmd: AgentCommand):

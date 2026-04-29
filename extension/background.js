@@ -14,15 +14,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             },
             body: JSON.stringify(request.payload)
         })
-        .then(async res => {
+        .then(async (res) => {
             if (!res.ok) {
                 const errorText = await res.text();
                 throw new Error(`Agent returned ${res.status}: ${errorText}`);
             }
             return res.json();
         })
-        .then(data => sendResponse({ success: true, data }))
-        .catch(err => {
+        .then((data) => sendResponse({ success: true, data }))
+        .catch((err) => {
             console.error("Agent Error:", err);
             sendResponse({ 
                 success: false, 
@@ -30,14 +30,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             });
         });
         
-        return true; // async
+        return true; // Keep channel open for async response
     }
     
     if (request.action === "CHECK_AGENT_HEALTH") {
         fetch(`${LOCAL_AGENT_URL}/health`)
-        .then(res => res.json())
-        .then(data => sendResponse({ success: true, data }))
-        .catch(err => sendResponse({ 
+        .then((res) => res.json())
+        .then((data) => sendResponse({ success: true, data }))
+        .catch(() => sendResponse({ 
             success: false, 
             error: "Offline" 
         }));

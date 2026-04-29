@@ -50,6 +50,18 @@ Ensure Python is added to your Windows PATH. You may need to use `py` or `python
 - Verify your API key in `.env`.
 - Ensure you have sufficient credits on your OpenAI account.
 
+## Syntax Verification
+Run these commands to verify the code is syntactically correct:
+```powershell
+# Python
+python -m py_compile local-agent/main.py
+
+# Javascript
+node --check extension/background.js
+node --check extension/sidebar.js
+node --check extension/content.js
+```
+
 ## MVP Scope (Read-Only)
 Walle is currently in **Read-Only MVP mode**.
 - [x] Extracts: URL, Title, Visible Text, Forms, Buttons, Tables, Links.
