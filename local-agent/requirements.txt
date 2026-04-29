@@ -3,3 +3,8 @@ uvicorn
 python-dotenv
 openai>=1.0.0
 pydantic
+google-generativeai
+anthropic
+mistralai
+httpx
+pytest

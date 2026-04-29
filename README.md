@@ -47,22 +47,28 @@ Ensure Python is added to your Windows PATH. You may need to use `py` or `python
 - Refresh the Chrome extension after starting the agent.
 
 ### "OpenAI API Error" (insufficient_quota)
-- **Important**: A ChatGPT Plus subscription does **not** include API credits. You must have a positive balance in your [OpenAI API Dashboard](https://platform.openai.com/account/billing) to use AI features.
+- **Important**: A ChatGPT Plus or Claude Pro subscription does **not** include API credits. You must have a positive balance in your provider's API dashboard.
 - If you don't have credits, Walle will automatically switch to **Offline Fallback Mode**.
 
+## Multi-LLM Provider Support
+Walle now supports multiple AI backends. You can choose your preferred provider in the `.env` file:
+- `LLM_PROVIDER`: `openai`, `gemini`, `anthropic`, `mistral`, `groq`, `openrouter`.
+- `DEFAULT_MODEL`: Specify the model name (e.g., `gemini-2.0-flash`, `gpt-4o-mini`).
+
+**Recommendation**: Use **Gemini** for free MVP testing (requires a free Google AI Studio key).
+
 ## Offline Fallback Mode
-If your OpenAI quota is exceeded or the API key is missing, Walle remains functional by:
+If your selected provider fails (quota exceeded, missing key), Walle remains functional by:
 - Extracting and displaying page metadata (Title, Elements count).
 - Providing generic but helpful suggested actions.
 - Maintaining the safety layer for risky commands.
-
-To force this mode, set `OFFLINE_FALLBACK=true` in your `.env` file.
 
 ## Syntax Verification
 Run these commands to verify the code is syntactically correct:
 ```powershell
 # Python
 python -m py_compile local-agent/main.py
+python -m py_compile local-agent/llm_provider.py
 
 # Javascript
 node --check extension/background.js
